@@ -1,0 +1,800 @@
+//AB/ Project Structs from Table Definitions Generator
+//AB/ Object prj is a Dialog_Project
+    //AB/ Set Size to 450 856
+    //AB/ Set ProjectName to "Structs from Table Definitions Generator"
+    //AB/ Set ProjectFileName to "StructFromTable.dg"
+
+// Project Object Structure
+//   oStructFromTab is a ModalPanel
+//     oGenFile is a Form
+//     oOpenSource is a OpenDialog
+//     oExplanation is a Textbox
+//     oExplanation2 is a Textbox
+//     oTables is a Grid
+//     oSelectAll is a Button
+//     oDeselectAll is a Button
+//     oGenerate is a Button
+//     oCancel is a Button
+
+// Register all objects
+Register_Object oCancel
+Register_Object oDeselectAll
+Register_Object oExplanation
+Register_Object oExplanation2
+Register_Object oGenerate
+Register_Object oGenFile
+Register_Object oOpenSource
+Register_Object oSelectAll
+Register_Object oStructFromTab
+Register_Object oTables
+
+
+//AB-StoreTopStart
+
+//==============================================================================
+//
+// StructFromTable.dg: The main working guts of the StructsFromTables program.
+//
+// Mike Peat, Unicorn, 7th September 2006
+//
+//   NOTE: In order to manipulate this dialog in the Studio (VDF 11 as I write
+//         but VDF 12 is in Beta and I have not tested this with that yet) you
+//         will need to change the class of the oStructFromTab object below from
+//         BasicDialog to ModalDialog.  Once you do that you can play with in
+//         the VDF Studio, but to get its proper behaviour back, change it back
+//         to BasicPanel, save and recompile before release.
+//
+//==============================================================================
+
+//==============================================================================
+//
+// Copyright (c) 2006 Mike Peat
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+//
+//==============================================================================
+
+//AB-StoreTopEnd
+
+//AB-IgnoreStart
+Use Windows.pkg
+Use File_dlg.Pkg
+//AB-IgnoreEnd
+
+
+
+Object oStructFromTab is a ModalPanel
+//Object oStructFromTab is a BasicPanel
+    Set Location to 1 2
+
+    //AB-StoreTopStart
+    
+    Use SEQ_Chnl.pkg  // Be polite about channels
+    
+    Property String   psSourceFile Public "TableStructs.pkg"
+    Property Boolean  pbFileOpened Public FALSE
+    Property Integer  piChannel    Public 0
+    Property String[] pasExisting  Public
+    Property String   psBaseName   Public "Generate Structs From Tables"
+    
+    On_Key Key_Alt+Key_S Send SelectAll
+    On_Key Key_Alt+Key_D Send DeselectAll
+    On_Key Key_Alt+Key_G Send GenerateStructs
+    On_Key Key_Alt+Key_C Send Cancel
+    On_Key kCancel       Send Cancel
+    
+    Function ProperCase String sText Returns String
+        Function_Return (Overstrike(Uppercase(Left(sText, 1)), LowerCase(sText), 1))
+    End_Function  // ProperCase
+    
+    Procedure NewWorkspace
+        //Send Info_Box ("The current workspace has changed to '" + ;
+                       //CurrentWorkspace(oApplication(Desktop)) + ;
+                       //"'\n\nThe filelist will be reloaded") ;
+                       //"Workspace Changed"
+        //Send Initalise
+    End_Procedure  // NewWorkspace
+    
+    Procedure OnSetFocus
+        If (WorkspaceChanged(oApplication(Desktop))) Send NewWorkspace
+    End_Function  // OnSetFocus
+    
+    Procedure ChangeWorkspace
+        Boolean bOpen
+        String  sFile sFL sName
+        Handle  hoWS
+    
+        Set Dialog_Caption of oOpenDlg to "Locate a Workspace to use"
+        Set FileMustExist_State of oOpenDlg to True
+        Set Filter_String of oOpenDlg to ;
+            "Workspace (*.ws)|*.ws|All Files (*.*)|*.*"
+    
+        Get Show_Dialog of oOpenDlg to bOpen
+    
+        If bOpen Begin
+            Get File_Name of oOpenDlg to sFile
+            
+            Get phoWorkspace     of (oApplication(Desktop)) to hoWS
+            Send DoClearPaths    to hoWS
+            Send DoOpenWorkspace of (oApplication(Desktop))    sFile
+            Get psFilelist       of hoWS                    to sFL
+            Get psWorkspaceName  of hoWS                    to sName
+            Set Label to (psBaseName(Self) * "-" * sName)
+//Showln "Workspace file: " sFile
+//Showln "Workspace:      " sName
+//Showln "Filelist;       " sFL
+            Set_Attribute DF_FILELIST_NAME to sFL
+            Send ListTables
+        End
+        
+    End_Procedure  // ChangeWorkspace
+
+    Procedure ChangeFilelist
+        Boolean bOpen
+        String  sFile
+    
+        Set Dialog_Caption of oOpenDlg to "Locate a Filelist to use"
+        Set FileMustExist_State of oOpenDlg to True
+        Set Filter_String of oOpenDlg to ;
+            "Config (*.cfg)|*.cfg|All Files (*.*)|*.*"
+    
+        Get Show_Dialog of oOpenDlg to bOpen
+    
+        If bOpen Begin
+            Get File_Name of oOpenDlg to sFile
+            Set_Attribute DF_FILELIST_NAME to sFile
+            Send ListTables
+        End
+        
+    End_Procedure  // ChangeFilelist
+    
+    Procedure ChangeGenFile
+        Boolean bOpen bDone
+        String  sFile sPath sName
+        Integer iLen i
+    
+        Get Value to sFile
+    
+        If (sFile contains"\") Begin
+            Move (Length(sFile)) to iLen
+            Move (False)         to bDone
+    
+            For i from 0 to (iLen - 1)
+    
+                If (Mid(sFile, 1, (iLen - i)) = "\") Begin
+                    Move (Left(sFile, (iLen - i - 1))) to sPath
+                    Move (Right(sFile, (i - 1)))       to sName
+                    Set Initial_Folder of oOpenDlg     to sPath
+                    Set File_Title     of oOpenDlg     to sName
+                    Move (True) to bDone
+                End
+    
+                If bDone Break
+            Loop
+    
+        End
+
+        Set Dialog_Caption of oOpenDlg to "Select a file to use for the generated code"
+        Set FileMustExist_State of oOpenDlg to False
+        Set Filter_String of oOpenDlg to ;
+            "Packages (*.pkg)|*.pkg|Source (*.src)|*.src|Include Files (*.inc)|*.inc|All Source (*.src;*.pkg;*.inc)|*.src;*.pkg;*.inc|All Files (*.*)|*.*"
+    
+        Get Show_Dialog of oOpenDlg to bOpen
+    
+        If bOpen Begin
+            Get File_Name of oOpenDlg to sFile
+            Set Value     of oGenFile to sFile
+            Send ListTables
+        End
+        
+    End_Procedure  // ChangeGenFile        
+
+    Procedure FindExisting
+        Integer  iChn
+        String   sLine sPath
+        String[] asExisting
+    
+        Get Seq_New_Channel to iChn
+    
+        Get Value of oGenFile to sPath
+        Direct_Input Channel iChn sPath
+    
+        While Not (SeqEOF)
+            ReadLn sLine
+            If (Left(sLine, 16) = "Declare_Datafile") ;
+                Move (Trim(Replace("Declare_Datafile ", sLine, ""))) to ;
+                asExisting[(SizeOfArray(asExisting))]
+        Loop
+    
+        Set pasExisting to asExisting
+    
+        Close_Output Channel iChn
+        Send SEQ_Release_Channel iChn
+    End_Procedure  // FindExisting
+    
+    Function TableInFile String sTable Returns Boolean
+        String[] asExisting
+        Integer  i
+    
+        Get pasExisting to asExisting
+    
+        For i from 0 to (SizeOfArray(asExisting) - 1)
+            If (sTable = asExisting[i]) Function_Return TRUE
+        Loop
+    
+        Function_Return FALSE
+    End_Function  // TableInFile
+    
+    Procedure ListTables
+        String  sDesc sTable sFile sFL
+        Handle  htFile hoWS
+        Boolean bExists
+    
+        // Clear grid
+        Send Delete_Data of oTables
+    
+        // See what's already in the file
+        Send FindExisting
+    
+        // Run through FileList
+        Move 0 to htFile
+        Send Ignore_Error of Error_Object_Id 75
+    
+        Repeat
+            Get_Attribute DF_FILE_NEXT_USED of htFile to htFile
+    
+            If (htFile > 0) Begin
+                Indicate Err FALSE
+                Open htFile
+                If (Err) Break
+                Get_Attribute DF_FILE_DISPLAY_NAME  of htFile to sDesc
+                Get_Attribute DF_FILE_LOGICAL_NAME  of htFile to sTable
+                Get_Attribute DF_FILE_ROOT_NAME     of htFile to sFile
+                Close htFile
+    
+                Get TableInFile sTable to bExists
+    
+                Send AddTableRow of oTables bExists htFile sDesc sTable sFile
+            End
+    
+        Until (htFile = 0)
+    
+        Send Trap_Error of Error_Object_Id 75
+    End_Procedure  // ListTables
+    
+    Function OpenOutputFile Returns Boolean
+        String  sPath
+        Integer iChn iHr iMn iSec
+        Date    dToday
+    
+        If (pbFileOpened(Self)) Function_Return TRUE
+    
+        Get Seq_New_Channel to iChn
+    
+        Get Value of oGenFile to sPath
+    
+        Direct_Output Channel iChn sPath
+    
+        If (Err) Function_Return FALSE
+    
+        Set pbFileOpened to TRUE
+        Set piChannel    to iChn
+    
+        SysDate4 dToday iHr iMn iSec
+    
+        WriteLn "//=============================================================================="
+        WriteLn "//"
+        WriteLn "// " (psSourceFile(Self)) " - Structs and methods for selected tables."
+        WriteLn "//"
+        WriteLn "// Generated by " (Module_Name(Self)) ": " dToday " " ;
+                (Right("0" + String(iHr),  2) + ":" + ;
+                 Right("0" + String(iMn),  2) + ":" + ;
+                 Right("0" + String(iSec), 2))
+        WriteLn "//"
+        WriteLn "// For each table included in this file several things are provided:"
+        WriteLn "//"
+        WriteLn "//    1. A STRUCT having the same layout as the table: 't<TableName>'."
+        WriteLn "//    2. A FUNCTION to move data from the file buffer to a struct variable and"
+        WriteLn "//       return that variable: '<TableName>_BufferToStruct'."
+        WriteLn "//    3. A PROCEDURE which takes a struct variable and moves its data to the"
+        WriteLn "//       file buffer: '<TableName>_StructToBuffer'."
+        WriteLn "//    4. A FUNCTION which loads a struct variable from the Current_Field_Value"
+        WriteLn "//       properties of a passed Data Dictionary handle and returns it:"
+        WriteLn "//       '<TableName>_DDToStruct'."
+        WriteLn "//    5. A PROCEDURE which takes a struct variable and a Data Dictionary handle"
+        WriteLn "//       and sets the DD Field_Changed_Value properties from the struct data:"
+        WriteLn "//       '<Table_Name>_StructToDD'."
+        WriteLn "//"
+        WriteLn "// NOTES: 1. The Procedures and Functions are GLOBAL."
+        WriteLn "//        2. The mechanism skips Overlap and Binary fields - sorry!"
+        WriteLn "//"
+        WriteLn "// This file is generated by running the program " (Module_Name(Self)) "."
+        WriteLn "// It should NEVER be manually edited."
+        WriteLn "//"
+        WriteLn "// The program should be run to regenerate the file if any changes have been"
+        WriteLn "// made to any of the tables for which structs and methods are being generated,"
+        WriteLn "// or if new tables are to be added to that list, or tables to be removed from"
+        WriteLn "// it (rare).  Programs using this file should then be recompiled."
+        WriteLn "//"
+        WriteLn "// Mike Peat, Unicorn, 24th August 2006 (mpeat@unicorninterglobal.com)"
+        WriteLn "//"
+        WriteLn "//=============================================================================="
+        Writeln
+        Writeln "Register_Procedure Set Field_Changed_Value Integer iField String Value"
+        Writeln "Register_Function  Field_Current_Value Integer iField Returns String"
+        Writeln
+    
+        Function_Return TRUE
+    End_Function  // OpenOutputFile
+    
+    Procedure CloseOutputFile
+        Integer iChn
+    
+        If Not (pbFileOpened(Self)) Procedure_Return  // Nothing to do
+    
+        Get piChannel to iChn
+    
+        WriteLn Channel iChn ;
+                "//=============================================================================="
+        WriteLn "// End of file " (psSourceFile(Self))
+        WriteLn "//=============================================================================="
+    
+        Close_Output Channel iChn
+        Send SEQ_Release_Channel iChn
+        Set pbFileOpened to FALSE
+    End_Procedure  // CloseOutputFile
+    
+    Procedure GenerateStruct Handle hfFile String sFile
+        Integer iChn iFlds iFld iType iPts
+        String  sName sStruct
+    
+        Get piChannel to iChn
+    
+        // Write the comments
+        WriteLn Channel iChn ;
+                "//=============================================================================="
+        WriteLn "// Struct and methods for table " (ProperCase(Self, sFile))
+        Writeln
+        WriteLn "Declare_Datafile " sFile
+        WriteLn
+    
+        Open hfFile
+    
+        Get_Attribute DF_FILE_NUMBER_FIELDS of hfFile to iFlds
+    
+        // Write the Struct:
+        Writeln "#IFDEF _struct_t" sFile
+        Writeln "#ELSE"
+        Move ("t" + ProperCase(Self, sFile)) to sStruct
+        Writeln "   Struct " sStruct
+        If (Checked_State(oIncRecnum(Self))) Writeln "   Integer Recnum"
+    
+        For iFld from 1 to iFlds
+            Get_Attribute DF_FIELD_TYPE of hfFile iFld to iType
+            Get_Attribute DF_FIELD_NAME of hfFile iFld to sName
+            If ((iType = DF_ASCII) or (iType = DF_TEXT)) Writeln "      String  " sName
+            If (iType  = DF_DATE)                        Writeln "      Date    " sName
+    
+            If (iType  = DF_BCD) Begin
+                Get_Attribute DF_FIELD_PRECISION of hfFile iFld to iPts
+                If (iPts = 0)                            Writeln "      Integer " sName
+                Else                                     Writeln "      Number  " sName
+            End
+    
+        Loop
+    
+        Writeln "   End_Struct  // t" (ProperCase(Self, sFile))
+        WriteLn "#ENDIF"
+        WriteLn
+    
+        // Write the buffer-to-struct function:
+        WriteLn "Function " (ProperCase(Self, sFile)) "_BufferToStruct Global Returns " sStruct
+        WriteLn "   " sStruct " stData"
+        WriteLn
+    
+        For iFld from 1 to iFlds
+            Get_Attribute DF_FIELD_NAME of hfFile iFld to sName
+            Get_Attribute DF_FIELD_TYPE of hfFile iFld to iType
+            If Not ((iType = DF_BINARY) or (iType = DF_OVERLAP)) ;
+               WriteLn "   Move " sFile "." (Pad(sName, 32)) " to stData." sName
+        Loop
+    
+        WriteLn
+        WriteLn "   Function_Return stData"
+    
+        WriteLn "End_Function  // " (ProperCase(Self, sFile)) "_BufferToStruct Global"
+        WriteLn
+    
+        // Write the struct-to-buffer procedure:
+        WriteLn "Procedure " (ProperCase(Self, sFile)) "_StructToBuffer Global " sStruct " stData"
+    
+        For iFld from 1 to iFlds
+            Get_Attribute DF_FIELD_NAME of hfFile iFld to sName
+            Get_Attribute DF_FIELD_TYPE of hfFile iFld to iType
+            If Not ((iType = DF_BINARY) or (iType = DF_OVERLAP)) ;
+               WriteLn "   Move stData." (Pad(sName, 32)) " to " sFile "." sName
+        Loop
+    
+        WriteLn "End_Procedure  // " (ProperCase(Self, sFile)) "_StructToBuffer Global"
+        WriteLn
+    
+        // Write the DD-to-struct function:
+        WriteLn "Function " (ProperCase(Self, sFile)) "_DDToStruct Global Handle hoDD Returns " sStruct
+        WriteLn "   " sStruct " stData"
+        WriteLn
+    
+        For iFld from 1 to iFlds
+            Get_Attribute DF_FIELD_NAME of hfFile iFld to sName
+            Get_Attribute DF_FIELD_TYPE of hfFile iFld to iType
+            If Not ((iType = DF_BINARY) or (iType = DF_OVERLAP)) ;
+               WriteLn "   Get Field_Current_Value of hoDD FIELD " sFile "." (Pad(sName, 32)) " to stData." sName
+        Loop
+    
+        WriteLn
+        WriteLn "   Function_Return stData"
+    
+        WriteLn "End_Function  // " (ProperCase(Self, sFile)) "_DDToStruct Global"
+        WriteLn
+    
+        // Write the struct-to-DD procedure:
+        WriteLn "Procedure " (ProperCase(Self, sFile)) "_StructToDD Global " sStruct " stData Handle hoDD"
+    
+        For iFld from 1 to iFlds
+            Get_Attribute DF_FIELD_NAME of hfFile iFld to sName
+                        Get_Attribute DF_FIELD_TYPE of hfFile iFld to iType
+            If Not ((iType = DF_BINARY) or (iType = DF_OVERLAP)) ;
+               WriteLn "   Set Field_Changed_Value of hoDD FIELD " sFile "." (Pad(sName, 32)) " to stData." sName
+        Loop
+    
+        WriteLn "End_Procedure  // " (ProperCase(Self, sFile)) "_StructToDD Global"
+        WriteLn
+    
+    
+        Close hfFile
+    End_Procedure  // GenerateStruct
+    
+    Procedure GenerateStructs
+        Integer iItems iCols iRows iRow iItem
+        String  sFile sPath
+        Handle  hfFile
+        Boolean bChkd bOK
+    
+        If (YesNo_Box(("WARNING: Running this process will overwrite any existing file:\n" + ;
+                       "     " + Value(oGenFile(Self)) + "\n\n" + ;
+                       "Do you wish to continue?"), "Generate Structs") <> MBR_YES) Procedure_Return
+    
+        Get OpenOutputFile to bOK
+    
+        If Not bOK Begin
+            Error 99002 ("Could not open" * psSourceFile(Self) * "for writing")
+            Procedure_Return
+        End
+    
+        Send Cursor_Wait to (Cursor_Control(Self))
+        Get Item_Count of oTables to iItems
+        Get Line_Size  of oTables to iCols
+        Move (iItems / iCols)     to iRows
+    
+        For iRow from 0 to (iRows - 1)
+            Move (iRow * iCols) to iItem
+            Get Select_State of oTables iItem     to bChkd
+            Get Value of oTables item (iItem + 1) to hfFile
+            Get Value of oTables item (iItem + 3) to sFile
+    
+            If bChkd Send GenerateStruct hfFile sFile
+        Loop
+    
+        Send CloseOutputFile
+        Send Cursor_Ready to (Cursor_Control(Self))
+    
+        Send Info_Box "Structures and Methods Generated" "Generate Structs"
+        Set Label of oCancel to "&Close"
+    End_Procedure  // GenerateStructs
+    
+    Procedure SelectAll
+        Integer iItems iCols iRows iRow iItem
+    
+        Get Item_Count of oTables to iItems
+        Get Line_Size  of oTables to iCols
+        Move (iItems / iCols)     to iRows
+    
+        For iRow from 0 to (iRows - 1)
+            Move (iRow * iCols) to iItem
+            Set Select_State of oTables iItem to TRUE
+        Loop
+    
+    End_Procedure  // SelectAll
+    
+    Procedure DeselectAll
+        Integer iItems iCols iRows iRow iItem
+    
+        Get Item_Count of oTables to iItems
+        Get Line_Size  of oTables to iCols
+        Move (iItems / iCols)     to iRows
+    
+        For iRow from 0 to (iRows - 1)
+            Move (iRow * iCols) to iItem
+            Set Select_State of oTables iItem to FALSE
+        Loop
+    
+    End_Procedure  // DeselectAll
+    
+    Procedure Initalise
+        String  sPath
+    
+        Get psDDSrcPath of (phoWorkspace(oApplication(Self))) to sPath
+        Move (sPath + "\" + psSourceFile(Self))               to sPath
+
+        Set Label to (psBaseName(Self) * "-" * ;
+            psWorkspaceName(phoWorkspace(oApplication(Self))))    
+        Set Value of oGenFile to sPath
+    
+        Send ListTables
+    End_Procedure  // Initalise
+    
+    //AB-StoreTopEnd
+
+    Set Border_Style to Border_Thick
+    Set Label to "Generate Structs from Table Definitions"
+    Set Locate_Mode to Center_On_Screen
+    Set Size to 366 363
+    Set piMaxSize to 366 363
+    Set piMinSize to 366 363
+
+    //AB-DDOStart
+
+
+    //AB-DDOEnd
+
+    Object oGenFile is a Form
+        Set Label to "File to use/generate:"
+        Set Size to 13 275
+        Set Location to 7 78
+        Set Label_Col_Offset to 72
+        Set Prompt_Button_Mode to pb_PromptOn
+
+        //AB-StoreStart
+        
+        On_Key Key_Enter Send ListTables
+        On_Key Key_Tab   Send ListTables
+        
+        Procedure OnSetFocus
+            If (WorkspaceChanged(oApplication(Desktop))) Send NewWorkspace
+        End_Function  // OnSetFocus
+        
+        Procedure Prompt
+            Send ChangeGenFile
+        End_Procedure  // Prompt
+        
+        //AB-StoreEnd
+
+    End_Object    // oGenFile
+    
+    Object oOpenDlg is a OpenDialog
+        //AB/ Set Location to 330 15
+        Set HideReadOnly_State to TRUE
+
+        //AB-StoreStart
+        
+        //AB-StoreEnd
+
+    End_Object
+
+    Object oExplanation is a Textbox
+        Set Label to "Tick the tables you want to generate structs and methods for in the grid below."
+        Set Location to 25 6
+        Set Size to 9 247
+        Set Justification_Mode to jMode_Left
+        Set TypeFace to "MS Sans Serif"
+        Set Focus_Mode to NonFocusable
+
+        //AB-StoreStart
+        
+        Procedure OnSetFocus
+            If (WorkspaceChanged(oApplication(Desktop))) Send NewWorkspace
+        End_Function  // OnSetFocus
+        
+        //AB-StoreEnd
+
+    End_Object    // oExplanation
+
+    Object oExplanation2 is a Textbox
+        Set Label to "You can change the name and location of the used/generated source file in the form above."
+        Set Location to 37 6
+        Set Size to 18 247
+        Set Justification_Mode to jMode_Left
+        Set TypeFace to "MS Sans Serif"
+        Set Focus_Mode to NonFocusable
+
+        //AB-StoreStart
+                                        
+        Procedure OnSetFocus
+            If (WorkspaceChanged(oApplication(Desktop))) Send NewWorkspace
+        End_Function  // OnSetFocus
+        
+        //AB-StoreEnd
+
+    End_Object    // oExplanation2
+
+    Object oTables is a Grid
+        Set Size to 267 349
+        Set Location to 62 4
+
+        Set Line_Width to 5 0
+
+        Set Form_Width    item 0 to 13
+        Set Header_Label  item 0 to ""
+        
+        Set Form_Width    item 1 to 19
+        Set Header_Label  item 1 to "No"
+        
+        Set Form_Width    item 2 to 163
+        Set Header_Label  item 2 to "Description"
+        
+        Set Form_Width    item 3 to 51
+        Set Header_Label  item 3 to "Table Name"
+        
+        Set Form_Width    item 4 to 98
+        Set Header_Label  item 4 to "File Name"
+        
+
+        //AB-StoreStart
+                                        
+        Set Select_Mode To Multi_Select
+        
+        Procedure AddTableRow Boolean bExist Integer iFile String sDesc String sTable String sFile
+            Send Add_Item msg_None ""
+            Set Checkbox_Item_State (Item_Count(Self) - 1) to TRUE
+            If bExist Set Select_State item (Item_Count(Self) - 1) to TRUE
+            Send Add_Item msg_None iFile
+            Set Entry_State (Item_Count (Self) - 1) to FALSE
+            Send Add_Item msg_None sDesc
+            Set Entry_State (Item_Count (Self) - 1) to FALSE
+            Send Add_Item msg_None sTable
+            Set Entry_State (Item_Count (Self) - 1) to FALSE
+            Send Add_Item msg_None sFile
+            Set Entry_State (Item_Count (Self) - 1) to FALSE
+        End_Procedure // AddTableRow
+        
+        Procedure OnSetFocus
+            If (WorkspaceChanged(oApplication(Desktop))) Send NewWorkspace
+        End_Function  // OnSetFocus
+        
+        
+        
+        //AB-StoreEnd
+
+    End_Object    // oTables
+
+    Object oSelectAll is a Button
+        Set Label to "&Select ALL"
+        Set Location to 334 126
+
+        //AB-StoreStart
+        
+        Procedure OnClick
+           Send SelectAll
+        End_Procedure // OnClick
+        
+        Procedure OnSetFocus
+            If (WorkspaceChanged(oApplication(Desktop))) Send NewWorkspace
+        End_Function  // OnSetFocus
+        
+        //AB-StoreEnd
+
+    End_Object    // oSelectAll
+
+    Object oDeselectAll is a Button
+        Set Label to "&DeSelect ALL"
+        Set Location to 334 180
+
+        //AB-StoreStart
+        
+        Procedure OnClick
+            Send DeselectAll
+        End_Procedure // OnClick
+        
+        Procedure OnSetFocus
+            If (WorkspaceChanged(oApplication(Desktop))) Send NewWorkspace
+        End_Function  // OnSetFocus
+        
+        //AB-StoreEnd
+
+    End_Object    // oDeselectAll
+
+    Object oGenerate is a Button
+        Set Label to "&Generate"
+        Set Location to 334 251
+        Set peAnchors to anBottomRight
+
+        //AB-StoreStart
+        
+        Procedure OnClick
+            Send GenerateStructs
+        End_Procedure // OnClick
+        
+        Procedure OnSetFocus
+            If (WorkspaceChanged(oApplication(Desktop))) Send NewWorkspace
+        End_Function  // OnSetFocus
+        
+        //AB-StoreEnd
+
+    End_Object    // oGenerate
+
+    Object oCancel is a Button
+        Set Label to "&Cancel"
+        Set Location to 334 304
+        Set peAnchors to anBottomRight
+
+        //AB-StoreStart
+        
+        Procedure OnClick
+           Send Close_Panel
+        End_Procedure // OnClick
+        //AB-StoreEnd
+
+    End_Object    // oCancel
+
+    Object oChangeWS is a Button
+        Set Size to 14 80
+        Set Location to 25 273
+        Set Label to "Change Workspace"
+        // fires when the button is clicked
+        Procedure OnClick
+            Send ChangeWorkspace
+        End_Procedure // OnClick
+    End_Object
+
+    Object oChangeFL is a Button
+        Set Size to 14 80
+        Set Location to 43 273
+        Set Label to "Change Filelist"
+        // fires when the button is clicked
+        Procedure OnClick
+            Send ChangeFilelist
+        End_Procedure // OnClick
+    End_Object
+
+    Object oIncRecnum is a CheckBox
+       Set Size to 14 50
+       Set Location to 336 13
+       Set Label to "Include Recnum"
+    
+        //Fires whenever the value of the control is changed
+        //Procedure OnChange
+        //    Boolean bChecked
+        //
+        //    Get Checked_State To bChecked
+        //End_Procedure
+    
+    End_Object
+
+
+    //AB-StoreStart
+    
+    //AB-StoreEnd
+
+End_Object    // oStructFromTab
+
+
+//AB-StoreStart
+
+//AB-StoreEnd
+
+//AB/ End_Object    // prj

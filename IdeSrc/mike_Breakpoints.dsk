@@ -1,0 +1,5 @@
+[C:\Projects\StructsFromTables-19\AppSrc\StructFromTable.dg]
+Source504=Move (Argument(phoCommandLine(ghoApplication), 1)) to sArg
+ConditionEnabled504=0
+Condition504= 
+504=1

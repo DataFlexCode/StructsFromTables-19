@@ -1,0 +1,770 @@
+Compiling Program: C:\Projects\StructsFromTables-19\AppSrc\StructsFromTables.src
+Memory Available: 2147483647
+1>//==============================================================================
+1>//
+1>// StructsFromTables.src: This is a little program which generates structs from
+1>//                        database tables.  For more information see the file
+1>//                        ReadMe.txt which should have accompanied this source.
+1>//
+1>// Mike Peat, Unicorn, 7th September 2006
+1>//
+1>//==============================================================================
+1>
+1>//==============================================================================
+1>//
+1>// Copyright (c) 2006 Mike Peat
+1>//
+1>// Permission is hereby granted, free of charge, to any person obtaining a copy
+1>// of this software and associated documentation files (the "Software"), to deal
+1>// in the Software without restriction, including without limitation the rights
+1>// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+1>// copies of the Software, and to permit persons to whom the Software is
+1>// furnished to do so, subject to the following conditions:
+1>//
+1>// The above copyright notice and this permission notice shall be included in
+1>// all copies or substantial portions of the Software.
+1>//
+1>// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+1>// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+1>// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+1>// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+1>// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+1>// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+1>// SOFTWARE.
+1>//
+1>//==============================================================================
+1>Use DfAllEnt.pkg
+Using pre-compiled package DFALLENT.PKG
+Including file: dfallent.pkd    (C:\Program Files (x86)\DataFlex 19.0\Pkg\dfallent.pkd)
+79228>Use cApplication.pkg
+79228>
+79228>Object oApplication is a cApplication
+79230>End_Object
+79231>
+79231>Use StructFromTable.dg
+Including file: StructFromTable.dg    (C:\Projects\StructsFromTables-19\AppSrc\StructFromTable.dg)
+79231>>>//==============================================================================
+79231>>>//
+79231>>>// StructFromTable.dg: The main working guts of the StructsFromTables program.
+79231>>>//
+79231>>>// Mike Peat, Unicorn, 7th September 2006
+79231>>>//
+79231>>>//   NOTE: In order to manipulate this dialog in the Studio (VDF 11 as I write
+79231>>>//         but VDF 12 is in Beta and I have not tested this with that yet) you
+79231>>>//         will need to change the class of the oStructFromTab object below from
+79231>>>//         BasicDialog to ModalDialog.  Once you do that you can play with in
+79231>>>//         the VDF Studio, but to get its proper behaviour back, change it back
+79231>>>//         to BasicPanel, save and recompile before release.
+79231>>>//
+79231>>>//   UPDATE: Now in glorious DataFlex 19.0 - 1st November 2017, so the above is
+79231>>>//           obsolete.  Seems to work OK!  ;-)
+79231>>>//
+79231>>>//==============================================================================
+79231>>>
+79231>>>//==============================================================================
+79231>>>//
+79231>>>// Copyright (c) 2006, 2017 (updated to DF v19.0) Mike Peat
+79231>>>//
+79231>>>// Permission is hereby granted, free of charge, to any person obtaining a copy
+79231>>>// of this software and associated documentation files (the "Software"), to deal
+79231>>>// in the Software without restriction, including without limitation the rights
+79231>>>// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+79231>>>// copies of the Software, and to permit persons to whom the Software is
+79231>>>// furnished to do so, subject to the following conditions:
+79231>>>//
+79231>>>// The above copyright notice and this permission notice shall be included in
+79231>>>// all copies or substantial portions of the Software.
+79231>>>//
+79231>>>// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+79231>>>// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+79231>>>// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+79231>>>// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+79231>>>// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+79231>>>// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+79231>>>// SOFTWARE.
+79231>>>//
+79231>>>//==============================================================================
+79231>>>
+79231>>>Use Windows.pkg
+79231>>>Use File_dlg.Pkg
+79231>>>Use SEQ_Chnl.pkg  // Be polite about channels
+79231>>>
+79231>>>Object oStructFromTab is a ModalPanel
+79233>>>    Set Location to 1 2
+79234>>>    
+79234>>>    Property String   psSourceFile Public "TableStructs.pkg"
+79236>>>    Property Boolean  pbFileOpened Public FALSE
+79238>>>    Property Integer  piChannel    Public 0
+79240>>>    Property String[] pasExisting  Public
+79242>>>    Property String   psBaseName   Public "Generate Structs From Tables"
+79244>>>    
+79244>>>    On_Key Key_Alt+Key_S Send SelectAll
+79245>>>    On_Key Key_Alt+Key_D Send DeselectAll
+79246>>>    On_Key Key_Alt+Key_G Send GenerateStructs
+79247>>>    On_Key Key_Alt+Key_C Send Cancel
+79248>>>    On_Key kCancel       Send Cancel
+79249>>>    
+79249>>>    Function ProperCase String sText Returns String
+79252>>>        Function_Return (Overstrike(Uppercase(Left(sText, 1)), LowerCase(sText), 1))
+79253>>>    End_Function
+79254>>>    
+79254>>>    Function WsFromSws String sSws Returns String
+79257>>>        Handle hoIni
+79257>>>        String sWs sRetVal
+79257>>>        
+79257>>>        Get Create (RefClass(cIniFile)) to hoIni
+79258>>>        Set psFilename        of hoIni  to sSws
+79259>>>        Get ReadString        of hoIni "WorkspacePaths" "ConfigFile" "" to sWs
+79260>>>        Send Destroy          of hoIni
+79261>>>        Move (Replace(".\", sWs, ExtractFilePath(sSws))) to sRetVal
+79262>>>        
+79262>>>        Function_Return sRetVal
+79263>>>    End_Function
+79264>>>    
+79264>>>    Procedure ChangeWorkspace
+79267>>>        Boolean bOpen
+79267>>>        String  sFile sFL sName sWS sWsFile
+79267>>>        Handle  hoWS hoIni
+79267>>>    
+79267>>>        Set Dialog_Caption of oOpenDlg to "Locate a Workspace to use"
+79268>>>        Set FileMustExist_State of oOpenDlg to True
+79269>>>        Set Filter_String of oOpenDlg to ;            "Workspace (*.ws)|*.ws|Studio Workspace (*.sws)|*.sws|All Files (*.*)|*.*"
+79270>>>        Set Filter_Index of oOpenDlg to 1
+79271>>>
+79271>>>        Get Show_Dialog of oOpenDlg to bOpen
+79272>>>    
+79272>>>        If bOpen Begin
+79274>>>            Get File_Name of oOpenDlg to sFile
+79275>>>            
+79275>>>            If (Uppercase(Right(sFile, 4)) = ".SWS") Begin  // Studio workspace - find actual workspace file
+79277>>>                Get WsFromSws sFile to sFile
+79278>>>            End
+79278>>>>
+79278>>>            
+79278>>>            Get phoWorkspace     of (oApplication(Desktop)) to hoWS
+79279>>>            Send DoClearPaths    to hoWS
+79280>>>            Send DoOpenWorkspace of (oApplication(Desktop))    sFile
+79281>>>            Get psFilelist       of hoWS                    to sFL
+79282>>>            Get psWorkspaceName  of hoWS                    to sName
+79283>>>            Set Label to (psBaseName(Self) * "-" * sName)
+79284>>>            Set_Attribute DF_FILELIST_NAME to sFL
+79287>>>            Send ListTables
+79288>>>        End
+79288>>>>
+79288>>>        
+79288>>>    End_Procedure
+79289>>>
+79289>>>    Procedure ChangeFilelist
+79292>>>        Boolean bOpen
+79292>>>        String  sFile
+79292>>>    
+79292>>>        Set Dialog_Caption of oOpenDlg to "Locate a Filelist to use"
+79293>>>        Set FileMustExist_State of oOpenDlg to True
+79294>>>        Set Filter_String of oOpenDlg to ;            "Config (*.cfg)|*.cfg|All Files (*.*)|*.*"
+79295>>>        Set Filter_Index of oOpenDlg to 1
+79296>>>        Get Show_Dialog of oOpenDlg to bOpen
+79297>>>    
+79297>>>        If bOpen Begin
+79299>>>            Get File_Name of oOpenDlg to sFile
+79300>>>            Set_Attribute DF_FILELIST_NAME to sFile
+79303>>>            Send ListTables
+79304>>>        End
+79304>>>>
+79304>>>        
+79304>>>    End_Procedure
+79305>>>    
+79305>>>    Procedure ChangeGenFile
+79308>>>        Boolean bOpen bDone
+79308>>>        String  sFile sPath sName
+79308>>>        Integer iLen i
+79308>>>    
+79308>>>        Get Value to sFile
+79309>>>    
+79309>>>        If (sFile contains"\") Begin
+79311>>>            Move (Length(sFile)) to iLen
+79312>>>            Move (False)         to bDone
+79313>>>    
+79313>>>            For i from 0 to (iLen - 1)
+79319>>>>
+79319>>>    
+79319>>>                If (Mid(sFile, 1, (iLen - i)) = "\") Begin
+79321>>>                    Move (Left(sFile, (iLen - i - 1))) to sPath
+79322>>>                    Move (Right(sFile, (i - 1)))       to sName
+79323>>>                    Set Initial_Folder of oOpenDlg     to sPath
+79324>>>                    Set File_Title     of oOpenDlg     to sName
+79325>>>                    Move (True) to bDone
+79326>>>                End
+79326>>>>
+79326>>>    
+79326>>>                If bDone Break
+79329>>>            Loop
+79330>>>>
+79330>>>    
+79330>>>        End
+79330>>>>
+79330>>>
+79330>>>        Set Dialog_Caption of oOpenDlg to "Select a file to use for the generated code"
+79331>>>        Set FileMustExist_State of oOpenDlg to False
+79332>>>        Set Filter_String of oOpenDlg to ;            "Packages (*.pkg)|*.pkg|Source (*.src)|*.src|Include Files (*.inc)|*.inc|All Source (*.src;*.pkg;*.inc)|*.src;*.pkg;*.inc|All Files (*.*)|*.*"
+79333>>>    
+79333>>>        Get Show_Dialog of oOpenDlg to bOpen
+79334>>>    
+79334>>>        If bOpen Begin
+79336>>>            Get File_Name of oOpenDlg to sFile
+79337>>>            Set Value     of oGenFile to sFile
+79338>>>            Send ListTables
+79339>>>        End
+79339>>>>
+79339>>>        
+79339>>>    End_Procedure      
+79340>>>
+79340>>>    Procedure FindExisting
+79343>>>        Integer  iChn
+79343>>>        String   sLine sPath
+79343>>>        String[] asExisting
+79344>>>    
+79344>>>        Get Seq_New_Channel to iChn
+79345>>>    
+79345>>>        Get Value of oGenFile to sPath
+79346>>>        Direct_Input Channel iChn sPath
+79348>>>    
+79348>>>        While Not (SeqEOF)
+79352>>>            ReadLn sLine
+79353>>>            If (Left(sLine, 16) = "Declare_Datafile") ;                Move (Trim(Replace("Declare_Datafile ", sLine, ""))) to ;                asExisting[(SizeOfArray(asExisting))]
+79356>>>        Loop
+79357>>>>
+79357>>>    
+79357>>>        Set pasExisting to asExisting
+79358>>>    
+79358>>>        Close_Output Channel iChn
+79360>>>        Send SEQ_Release_Channel iChn
+79361>>>    End_Procedure
+79362>>>    
+79362>>>    Function TableInFile String sTable Returns Boolean
+79365>>>        String[] asExisting
+79366>>>        Integer  i
+79366>>>    
+79366>>>        Get pasExisting to asExisting
+79367>>>    
+79367>>>        For i from 0 to (SizeOfArray(asExisting) - 1)
+79373>>>>
+79373>>>            If (sTable = asExisting[i]) Function_Return TRUE
+79376>>>        Loop
+79377>>>>
+79377>>>    
+79377>>>        Function_Return FALSE
+79378>>>    End_Function
+79379>>>    
+79379>>>    Procedure ListTables
+79382>>>        String  sDesc sTable sFile sFL
+79382>>>        Handle  htFile hoWS
+79382>>>        Boolean bExists
+79382>>>    
+79382>>>        // Clear grid
+79382>>>        Send Delete_Data of oTables
+79383>>>    
+79383>>>        // See what's already in the file
+79383>>>        Send FindExisting
+79384>>>    
+79384>>>        // Run through FileList
+79384>>>        Move 0 to htFile
+79385>>>        Send Ignore_Error of Error_Object_Id 75
+79386>>>    
+79386>>>        Repeat
+79386>>>>
+79386>>>            Get_Attribute DF_FILE_NEXT_USED of htFile to htFile
+79389>>>    
+79389>>>            If (htFile > 0) Begin
+79391>>>                Indicate Err FALSE
+79392>>>                Open htFile
+79394>>>                If (Err) Break
+79397>>>                Get_Attribute DF_FILE_DISPLAY_NAME  of htFile to sDesc
+79400>>>                Get_Attribute DF_FILE_LOGICAL_NAME  of htFile to sTable
+79403>>>                Get_Attribute DF_FILE_ROOT_NAME     of htFile to sFile
+79406>>>                Close htFile
+79407>>>    
+79407>>>                Get TableInFile sTable to bExists
+79408>>>    
+79408>>>                Send AddTableRow of oTables bExists htFile sDesc sTable sFile
+79409>>>            End
+79409>>>>
+79409>>>    
+79409>>>        Until (htFile = 0)
+79411>>>    
+79411>>>        Send Trap_Error of Error_Object_Id 75
+79412>>>    End_Procedure
+79413>>>    
+79413>>>    Function OpenOutputFile Returns Boolean
+79416>>>        String  sPath
+79416>>>        Integer iChn iHr iMn iSec
+79416>>>        Date    dToday
+79416>>>    
+79416>>>        If (pbFileOpened(Self)) Function_Return TRUE
+79419>>>    
+79419>>>        Get Seq_New_Channel to iChn
+79420>>>    
+79420>>>        Get Value of oGenFile to sPath
+79421>>>    
+79421>>>        Direct_Output Channel iChn sPath
+79423>>>    
+79423>>>        If (Err) Function_Return FALSE
+79426>>>    
+79426>>>        Set pbFileOpened to TRUE
+79427>>>        Set piChannel    to iChn
+79428>>>    
+79428>>>        SysDate4 dToday iHr iMn iSec
+79432>>>    
+79432>>>        WriteLn "//=============================================================================="
+79434>>>        WriteLn "//"
+79436>>>        WriteLn "// " (psSourceFile(Self)) " - Structs and methods for selected tables."
+79440>>>        WriteLn "//"
+79442>>>        WriteLn "// Generated by " (Module_Name(Self)) ": " dToday " " ;                (Right("0" + String(iHr),  2) + ":" + ;                 Right("0" + String(iMn),  2) + ":" + ;                 Right("0" + String(iSec), 2))
+79449>>>        WriteLn "//"
+79451>>>        WriteLn "// For each table included in this file several things are provided:"
+79453>>>        WriteLn "//"
+79455>>>        WriteLn "//    1. A STRUCT having the same layout as the table: 't<TableName>'."
+79457>>>        WriteLn "//    2. A FUNCTION to move data from the file buffer to a struct variable and"
+79459>>>        WriteLn "//       return that variable: '<TableName>_BufferToStruct'."
+79461>>>        WriteLn "//    3. A PROCEDURE which takes a struct variable and moves its data to the"
+79463>>>        WriteLn "//       file buffer: '<TableName>_StructToBuffer'."
+79465>>>        WriteLn "//    4. A FUNCTION which loads a struct variable from the Current_Field_Value"
+79467>>>        WriteLn "//       properties of a passed Data Dictionary handle and returns it:"
+79469>>>        WriteLn "//       '<TableName>_DDToStruct'."
+79471>>>        WriteLn "//    5. A PROCEDURE which takes a struct variable and a Data Dictionary handle"
+79473>>>        WriteLn "//       and sets the DD Field_Changed_Value properties from the struct data:"
+79475>>>        WriteLn "//       '<Table_Name>_StructToDD'."
+79477>>>        WriteLn "//"
+79479>>>        WriteLn "// NOTES: 1. The Procedures and Functions are GLOBAL."
+79481>>>        WriteLn "//        2. The mechanism skips Overlap and Binary fields - sorry!"
+79483>>>        WriteLn "//"
+79485>>>        WriteLn "// This file is generated by running the program " (Module_Name(Self)) "."
+79489>>>        WriteLn "// It should NEVER be manually edited."
+79491>>>        WriteLn "//"
+79493>>>        WriteLn "// The program should be run to regenerate the file if any changes have been"
+79495>>>        WriteLn "// made to any of the tables for which structs and methods are being generated,"
+79497>>>        WriteLn "// or if new tables are to be added to that list, or tables to be removed from"
+79499>>>        WriteLn "// it (rare).  Programs using this file should then be recompiled."
+79501>>>        WriteLn "//"
+79503>>>        WriteLn "// Mike Peat, Unicorn, 24th August 2006 (mpeat@unicorninterglobal.com)"
+79505>>>        WriteLn "//"
+79507>>>        WriteLn "//=============================================================================="
+79509>>>        Writeln
+79510>>>        Writeln "Register_Procedure Set Field_Changed_Value Integer iField String Value"
+79512>>>        Writeln "Register_Function  Field_Current_Value Integer iField Returns String"
+79514>>>        Writeln
+79515>>>    
+79515>>>        Function_Return TRUE
+79516>>>    End_Function
+79517>>>    
+79517>>>    Procedure CloseOutputFile
+79520>>>        Integer iChn
+79520>>>    
+79520>>>        If Not (pbFileOpened(Self)) Procedure_Return  // Nothing to do
+79523>>>    
+79523>>>        Get piChannel to iChn
+79524>>>    
+79524>>>        WriteLn Channel iChn ;                "//=============================================================================="
+79527>>>        WriteLn "// End of file " (psSourceFile(Self))
+79530>>>        WriteLn "//=============================================================================="
+79532>>>    
+79532>>>        Close_Output Channel iChn
+79534>>>        Send SEQ_Release_Channel iChn
+79535>>>        Set pbFileOpened to FALSE
+79536>>>    End_Procedure
+79537>>>    
+79537>>>    Procedure GenerateStruct Handle hfFile String sFile
+79540>>>        Integer iChn iFlds iFld iType iPts
+79540>>>        String  sName sStruct
+79540>>>    
+79540>>>        Get piChannel to iChn
+79541>>>    
+79541>>>        // Write the comments
+79541>>>        WriteLn Channel iChn ;                "//=============================================================================="
+79544>>>        WriteLn "// Struct and methods for table " (ProperCase(Self, sFile))
+79547>>>        Writeln
+79548>>>        WriteLn "Declare_Datafile " sFile
+79551>>>        WriteLn
+79552>>>    
+79552>>>        Open hfFile
+79554>>>    
+79554>>>        Get_Attribute DF_FILE_NUMBER_FIELDS of hfFile to iFlds
+79557>>>    
+79557>>>        // Write the Struct:
+79557>>>        Writeln "#IFDEF _struct_t" sFile
+79560>>>        Writeln "#ELSE"
+79562>>>        Move ("t" + ProperCase(Self, sFile)) to sStruct
+79563>>>        Writeln "   Struct " sStruct
+79566>>>        If (Checked_State(oIncRecnum(Self))) Writeln "   Integer Recnum"
+79570>>>    
+79570>>>        For iFld from 1 to iFlds
+79576>>>>
+79576>>>            Get_Attribute DF_FIELD_TYPE of hfFile iFld to iType
+79579>>>            Get_Attribute DF_FIELD_NAME of hfFile iFld to sName
+79582>>>            If ((iType = DF_ASCII) or (iType = DF_TEXT)) Writeln "      String  " sName
+79587>>>            If (iType  = DF_DATE)                        Writeln "      Date    " sName
+79592>>>    
+79592>>>            If (iType  = DF_BCD) Begin
+79594>>>                Get_Attribute DF_FIELD_PRECISION of hfFile iFld to iPts
+79597>>>                If (iPts = 0)                            Writeln "      Integer " sName
+79602>>>                Else                                     Writeln "      Number  " sName
+79606>>>            End
+79606>>>>
+79606>>>    
+79606>>>        Loop
+79607>>>>
+79607>>>    
+79607>>>        Writeln "   End_Struct  // t" (ProperCase(Self, sFile))
+79610>>>        WriteLn "#ENDIF"
+79612>>>        WriteLn
+79613>>>    
+79613>>>        // Write the buffer-to-struct function:
+79613>>>        WriteLn "Function " (ProperCase(Self, sFile)) "_BufferToStruct Global Returns " sStruct
+79618>>>        WriteLn "   " sStruct " tData"
+79622>>>        WriteLn
+79623>>>    
+79623>>>        For iFld from 1 to iFlds
+79629>>>>
+79629>>>            Get_Attribute DF_FIELD_NAME of hfFile iFld to sName
+79632>>>            Get_Attribute DF_FIELD_TYPE of hfFile iFld to iType
+79635>>>            If Not ((iType = DF_BINARY) or (iType = DF_OVERLAP)) ;               WriteLn "   Move " sFile "." (Pad(sName, 32)) " to tData." sName
+79644>>>        Loop
+79645>>>>
+79645>>>    
+79645>>>        WriteLn
+79646>>>        WriteLn "   Function_Return tData"
+79648>>>    
+79648>>>        WriteLn "End_Function  // " (ProperCase(Self, sFile)) "_BufferToStruct Global"
+79652>>>        WriteLn
+79653>>>    
+79653>>>        // Write the struct-to-buffer procedure:
+79653>>>        WriteLn "Procedure " (ProperCase(Self, sFile)) "_StructToBuffer Global " sStruct " tData"
+79659>>>    
+79659>>>        For iFld from 1 to iFlds
+79665>>>>
+79665>>>            Get_Attribute DF_FIELD_NAME of hfFile iFld to sName
+79668>>>            Get_Attribute DF_FIELD_TYPE of hfFile iFld to iType
+79671>>>            If Not ((iType = DF_BINARY) or (iType = DF_OVERLAP)) ;               WriteLn "   Move tData." (Pad(sName, 32)) " to " sFile "." sName
+79680>>>        Loop
+79681>>>>
+79681>>>    
+79681>>>        WriteLn "End_Procedure  // " (ProperCase(Self, sFile)) "_StructToBuffer Global"
+79685>>>        WriteLn
+79686>>>    
+79686>>>        // Write the DD-to-struct function:
+79686>>>        WriteLn "Function " (ProperCase(Self, sFile)) "_DDToStruct Global Handle hoDD Returns " sStruct
+79691>>>        WriteLn "   " sStruct " tData"
+79695>>>        WriteLn
+79696>>>    
+79696>>>        For iFld from 1 to iFlds
+79702>>>>
+79702>>>            Get_Attribute DF_FIELD_NAME of hfFile iFld to sName
+79705>>>            Get_Attribute DF_FIELD_TYPE of hfFile iFld to iType
+79708>>>            If Not ((iType = DF_BINARY) or (iType = DF_OVERLAP)) ;               WriteLn "   Get Field_Current_Value of hoDD FIELD " sFile "." (Pad(sName, 32)) " to tData." sName
+79717>>>        Loop
+79718>>>>
+79718>>>    
+79718>>>        WriteLn
+79719>>>        WriteLn "   Function_Return tData"
+79721>>>    
+79721>>>        WriteLn "End_Function  // " (ProperCase(Self, sFile)) "_DDToStruct Global"
+79725>>>        WriteLn
+79726>>>    
+79726>>>        // Write the struct-to-DD procedure:
+79726>>>        WriteLn "Procedure " (ProperCase(Self, sFile)) "_StructToDD Global " sStruct " tData Handle hoDD"
+79732>>>    
+79732>>>        For iFld from 1 to iFlds
+79738>>>>
+79738>>>            Get_Attribute DF_FIELD_NAME of hfFile iFld to sName
+79741>>>                        Get_Attribute DF_FIELD_TYPE of hfFile iFld to iType
+79744>>>            If Not ((iType = DF_BINARY) or (iType = DF_OVERLAP)) ;               WriteLn "   Set Field_Changed_Value of hoDD FIELD " sFile "." (Pad(sName, 32)) " to tData." sName
+79753>>>        Loop
+79754>>>>
+79754>>>    
+79754>>>        WriteLn "End_Procedure  // " (ProperCase(Self, sFile)) "_StructToDD Global"
+79758>>>        WriteLn
+79759>>>    
+79759>>>    
+79759>>>        Close hfFile
+79760>>>    End_Procedure
+79761>>>    
+79761>>>    Procedure GenerateStructs
+79764>>>        Integer iItems iCols iRows iRow iItem
+79764>>>        String  sFile sPath
+79764>>>        Handle  hfFile
+79764>>>        Boolean bChkd bOK
+79764>>>    
+79764>>>        If (YesNo_Box(("WARNING: Running this process will overwrite any existing file:\n" + ;                       "     " + Value(oGenFile(Self)) + "\n\n" + ;                       "Do you wish to continue?"), "Generate Structs") <> MBR_YES) Procedure_Return
+79767>>>    
+79767>>>        Get OpenOutputFile to bOK
+79768>>>    
+79768>>>        If Not bOK Begin
+79770>>>            Error 99002 ("Could not open" * psSourceFile(Self) * "for writing")
+79771>>>>
+79771>>>            Procedure_Return
+79772>>>        End
+79772>>>>
+79772>>>    
+79772>>>        Send Cursor_Wait to (Cursor_Control(Self))
+79773>>>        Get Item_Count of oTables to iItems
+79774>>>        Get Line_Size  of oTables to iCols
+79775>>>        Move (iItems / iCols)     to iRows
+79776>>>    
+79776>>>        For iRow from 0 to (iRows - 1)
+79782>>>>
+79782>>>            Move (iRow * iCols) to iItem
+79783>>>            Get Select_State of oTables iItem     to bChkd
+79784>>>            Get Value of oTables item (iItem + 1) to hfFile
+79785>>>            Get Value of oTables item (iItem + 3) to sFile
+79786>>>    
+79786>>>            If bChkd Send GenerateStruct hfFile sFile
+79789>>>        Loop
+79790>>>>
+79790>>>    
+79790>>>        Send CloseOutputFile
+79791>>>        Send Cursor_Ready to (Cursor_Control(Self))
+79792>>>    
+79792>>>        Send Info_Box "Structures and Methods Generated" "Generate Structs"
+79793>>>        Set Label of oCancel to "&Close"
+79794>>>    End_Procedure
+79795>>>    
+79795>>>    Procedure SelectAll
+79798>>>        Integer iItems iCols iRows iRow iItem
+79798>>>    
+79798>>>        Get Item_Count of oTables to iItems
+79799>>>        Get Line_Size  of oTables to iCols
+79800>>>        Move (iItems / iCols)     to iRows
+79801>>>    
+79801>>>        For iRow from 0 to (iRows - 1)
+79807>>>>
+79807>>>            Move (iRow * iCols) to iItem
+79808>>>            Set Select_State of oTables iItem to TRUE
+79809>>>        Loop
+79810>>>>
+79810>>>    
+79810>>>    End_Procedure
+79811>>>    
+79811>>>    Procedure DeselectAll
+79814>>>        Integer iItems iCols iRows iRow iItem
+79814>>>    
+79814>>>        Get Item_Count of oTables to iItems
+79815>>>        Get Line_Size  of oTables to iCols
+79816>>>        Move (iItems / iCols)     to iRows
+79817>>>    
+79817>>>        For iRow from 0 to (iRows - 1)
+79823>>>>
+79823>>>            Move (iRow * iCols) to iItem
+79824>>>            Set Select_State of oTables iItem to FALSE
+79825>>>        Loop
+79826>>>>
+79826>>>    
+79826>>>    End_Procedure
+79827>>>    
+79827>>>    Procedure Initalise
+79830>>>        String  sPath sArg sWs sErr
+79830>>>        Integer iRes
+79830>>>        
+79830>>>        Move (Argument(phoCommandLine(ghoApplication), 1)) to sArg
+79831>>>        
+79831>>>        If (sArg <> "") Begin
+79833>>>            Get WsFromSws sArg to sWs
+79834>>>            Send DoClearPaths of (phoWorkspace(ghoApplication))
+79835>>>            Move (OpenWorkspaceFile(phoWorkspace(ghoApplication), sWs)) to iRes
+79836>>>            
+79836>>>            If (iRes <> wsWorkspaceOpened) Begin
+79838>>>                Get OpenWorkspaceErrorMessage of (phoWorkspace(ghoApplication)) iRes to sErr
+79839>>>                Send Stop_Box sErr ("Error opening workspace" * sArg)
+79840>>>                Abort
+79841>>>>
+79841>>>            End
+79841>>>>
+79841>>>
+79841>>>        End
+79841>>>>
+79841>>>        
+79841>>>        Get psAppSrcPath of (phoWorkspace(oApplication(Self))) to sPath
+79842>>>        Move (sPath + "\" + psSourceFile(Self))               to sPath
+79843>>>
+79843>>>        Set Label to (psBaseName(Self) * "-" * ;            psWorkspaceName(phoWorkspace(oApplication(Self))))    
+79844>>>        Set Value of oGenFile to sPath
+79845>>>    
+79845>>>        Send ListTables
+79846>>>    End_Procedure
+79847>>>    
+79847>>>    Set Border_Style to Border_Thick
+79848>>>    Set Label to "Generate Structs from Table Definitions"
+79849>>>    Set Locate_Mode to Center_On_Screen
+79850>>>    Set Size to 349 356
+79851>>>    Set piMaxSize to 349 356
+79852>>>    Set piMinSize to 349 356
+79853>>>
+79853>>>    Object oGenFile is a Form
+79855>>>        Set Label to "File to use/generate:"
+79856>>>        Set Size to 13 275
+79857>>>        Set Location to 7 78
+79858>>>        Set Label_Col_Offset to 72
+79859>>>        Set Prompt_Button_Mode to pb_PromptOn
+79860>>>
+79860>>>        On_Key Key_Enter Send ListTables
+79861>>>        On_Key Key_Tab   Send ListTables
+79862>>>        
+79862>>>        Procedure Prompt
+79865>>>            Send ChangeGenFile
+79866>>>        End_Procedure
+79867>>>
+79867>>>    End_Object
+79868>>>    
+79868>>>    Object oOpenDlg is a OpenDialog
+79870>>>        Set HideReadOnly_State to TRUE
+79871>>>    End_Object
+79872>>>
+79872>>>    Object oExplanation is a Textbox
+79874>>>        Set Label to "Tick the tables you want to generate structs and methods for in the grid below."
+79875>>>        Set Location to 44 6
+79876>>>        Set Size to 9 247
+79877>>>        Set Justification_Mode to jMode_Left
+79878>>>        Set Focus_Mode to NonFocusable
+79879>>>    End_Object
+79880>>>
+79880>>>    Object oExplanation2 is a Textbox
+79882>>>        Set Label to "You can change the name and location of the used/generated"
+79883>>>        Set Location to 25 6
+79884>>>        Set Size to 9 279
+79885>>>        Set Justification_Mode to jMode_Left
+79886>>>        Set Focus_Mode to NonFocusable
+79887>>>    End_Object
+79888>>>
+79888>>>    Object oExplanation3 is a Textbox
+79890>>>        Set Label to "source file in the form above."
+79891>>>        Set Location to 33 6
+79892>>>        Set Size to 9 279
+79893>>>        Set Justification_Mode to jMode_Left
+79894>>>        Set Focus_Mode to NonFocusable
+79895>>>    End_Object
+79896>>>
+79896>>>    Object oTables is a Grid
+79898>>>        Set Size to 267 349
+79899>>>        Set Location to 62 4
+79900>>>
+79900>>>        Set Line_Width to 5 0
+79901>>>
+79901>>>        Set Form_Width    item 0 to 13
+79902>>>        Set Header_Label  item 0 to ""
+79903>>>        
+79903>>>        Set Form_Width    item 1 to 19
+79904>>>        Set Header_Label  item 1 to "No"
+79905>>>        
+79905>>>        Set Form_Width    item 2 to 163
+79906>>>        Set Header_Label  item 2 to "Description"
+79907>>>        
+79907>>>        Set Form_Width    item 3 to 51
+79908>>>        Set Header_Label  item 3 to "Table Name"
+79909>>>        
+79909>>>        Set Form_Width    item 4 to 98
+79910>>>        Set Header_Label  item 4 to "File Name"
+79911>>>        
+79911>>>        Set Select_Mode To Multi_Select
+79912>>>        
+79912>>>        Procedure AddTableRow Boolean bExist Integer iFile String sDesc String sTable String sFile
+79915>>>            Send Add_Item msg_None ""
+79916>>>            Set Checkbox_Item_State (Item_Count(Self) - 1) to TRUE
+79917>>>            If bExist Set Select_State item (Item_Count(Self) - 1) to TRUE
+79920>>>            Send Add_Item msg_None iFile
+79921>>>            Set Entry_State (Item_Count (Self) - 1) to FALSE
+79922>>>            Send Add_Item msg_None sDesc
+79923>>>            Set Entry_State (Item_Count (Self) - 1) to FALSE
+79924>>>            Send Add_Item msg_None sTable
+79925>>>            Set Entry_State (Item_Count (Self) - 1) to FALSE
+79926>>>            Send Add_Item msg_None sFile
+79927>>>            Set Entry_State (Item_Count (Self) - 1) to FALSE
+79928>>>        End_Procedure
+79929>>>        
+79929>>>    End_Object
+79930>>>
+79930>>>    Object oSelectAll is a Button
+79932>>>        Set Label to "&Select ALL"
+79933>>>        Set Location to 334 126
+79934>>>
+79934>>>        Procedure OnClick
+79937>>>           Send SelectAll
+79938>>>        End_Procedure
+79939>>>        
+79939>>>    End_Object
+79940>>>
+79940>>>    Object oDeselectAll is a Button
+79942>>>        Set Label to "Deselect ALL"
+79943>>>        Set Location to 334 180
+79944>>>
+79944>>>        Procedure OnClick
+79947>>>            Send DeselectAll
+79948>>>        End_Procedure
+79949>>>        
+79949>>>    End_Object
+79950>>>
+79950>>>    Object oGenerate is a Button
+79952>>>        Set Label to "Generate"
+79953>>>        Set Location to 334 251
+79954>>>        Set peAnchors to anBottomRight
+79955>>>        
+79955>>>        Procedure OnClick
+79958>>>            Send GenerateStructs
+79959>>>        End_Procedure
+79960>>>        
+79960>>>    End_Object
+79961>>>
+79961>>>    Object oCancel is a Button
+79963>>>        Set Label to "Close"
+79964>>>        Set Location to 334 304
+79965>>>        Set peAnchors to anBottomRight
+79966>>>
+79966>>>        Procedure OnClick
+79969>>>           Send Close_Panel
+79970>>>        End_Procedure
+79971>>>
+79971>>>    End_Object
+79972>>>
+79972>>>    Object oChangeWS is a Button
+79974>>>        Set Size to 14 80
+79975>>>        Set Location to 25 273
+79976>>>        Set Label to "Change Workspace"
+79977>>>
+79977>>>        Procedure OnClick
+79980>>>            Send ChangeWorkspace
+79981>>>        End_Procedure
+79982>>>
+79982>>>    End_Object
+79983>>>
+79983>>>    Object oChangeFL is a Button
+79985>>>        Set Size to 14 80
+79986>>>        Set Location to 43 273
+79987>>>        Set Label to "Change Filelist"
+79988>>>
+79988>>>        Procedure OnClick
+79991>>>            Send ChangeFilelist
+79992>>>        End_Procedure
+79993>>>
+79993>>>    End_Object
+79994>>>
+79994>>>    Object oIncRecnum is a CheckBox
+79996>>>       Set Size to 14 50
+79997>>>       Set Location to 336 13
+79998>>>       Set Label to "Include Recnum"
+79999>>>    End_Object
+80000>>>
+80000>>>End_Object
+80001>>>
+80001>
+80001>Send Initalise of (oStructFromTab(Desktop))
+80002>Start_UI          (oStructFromTab(Desktop))
+80004>
+Summary
+Memory Available: 2147483647
+Total Warnings : 0
+Total Errors   : 0
+Total Symbols  : 45603
+Total Resources: 0
+Total Commands : 80003
+Total Windows  : 1
+Total Pages    : 1
+Static Data    : 489785
+Message area   : 543035
+Total Blocks   : 28613
