@@ -1,0 +1,10 @@
+[Properties]
+Version=20.0
+[WorkspacePaths]
+ConfigFile=.\Programs\Config.ws
+[Projects]
+Project0=StructsFromTables.src
+[ProjectParameters]
+StructsFromTables.src=&quot;C:\projects\StructsFromTables-19\Structs From Tables.sws&quot;
+[Conditionals]
+Is$WebApp=False
