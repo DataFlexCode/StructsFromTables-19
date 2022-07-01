@@ -113,7 +113,7 @@ Procedure DoStuff Global Integer iNum
    Send ShowCust iNum tCust
 End_Procedure  // DoStuff
 
-Integer giRec
+Integer giRec 
 String  gsAKey
 
 Clear Customer
