@@ -98,13 +98,21 @@ Procedure ShowCust Global Integer iNum tCustomer tThisOne
    ShowLn "=================================="
 
 ShowLn ("ShowCust, record" * String(iNum))
+
    ShowLn "Number:      " (String(tThisOne.Customer_Number))
+   
    ShowLn "Name:        " tThisOne.Name
+   
    ShowLn "Address:     " tThisOne.Address
+   
    ShowLn "City:        " tThisOne.City
+   
    ShowLn "State:       " tThisOne.State
+   
    ShowLn "=================================="
+   
    ShowLn
+   
 End_Procedure  // ShowCust
 
 Procedure DoStuff Global Integer iNum
