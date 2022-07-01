@@ -84,50 +84,50 @@ Usage Example:
 
 //==============================================
 
-Use Windows.pkg
-Use cApplication.pkg
-Use TableStructs.pkg
+    Use Windows.pkg
+    Use cApplication.pkg
+    Use TableStructs.pkg
 
-Object oApplication is a cApplication
-End_Object
+    Object oApplication is a cApplication
+    End_Object
 
-Open Customer
+    Open Customer
 
-Procedure ShowCust Global Integer iNum tCustomer tThisOne
+    Procedure ShowCust Global Integer iNum tCustomer tThisOne
 
-    ShowLn "=================================="
-    ShowLn ("ShowCust, record" * String(iNum))
-    ShowLn "Number:      " (String(tThisOne.Customer_Number))    
-    ShowLn "Name:        " tThisOne.Name   
-    ShowLn "Address:     " tThisOne.Address    
-    ShowLn "City:        " tThisOne.City    
-    ShowLn "State:       " tThisOne.State    
-    ShowLn "=================================="    
-    ShowLn    
-End_Procedure  // ShowCust
+        ShowLn "=================================="
+        ShowLn ("ShowCust, record" * String(iNum))
+        ShowLn "Number:      " (String(tThisOne.Customer_Number))    
+        ShowLn "Name:        " tThisOne.Name   
+        ShowLn "Address:     " tThisOne.Address    
+        ShowLn "City:        " tThisOne.City    
+        ShowLn "State:       " tThisOne.State    
+        ShowLn "=================================="    
+        ShowLn    
+    End_Procedure  // ShowCust
 
-Procedure DoStuff Global Integer iNum
-   tCustomer tCust
+    Procedure DoStuff Global Integer iNum
+        tCustomer tCust
 
-   Get Customer_BufferToStruct to tCust
+        Get Customer_BufferToStruct to tCust
 
-   Send ShowCust iNum tCust
-End_Procedure  // DoStuff
+        Send ShowCust iNum tCust
+    End_Procedure  // DoStuff
 
-Integer giRec
-String  gsAKey
+    Integer giRec
+    String  gsAKey
 
-Clear Customer
+    Clear Customer
 
-For giRec From 1 to 5
-   Find gt Customer by Index.2
-   If (Found) Send DoStuff giRec
-   Else Break
-Loop
+    For giRec From 1 to 5
+        Find gt Customer by Index.2
+        If (Found) Send DoStuff giRec
+        Else Break
+    Loop
 
-InKey gsAKey
+    InKey gsAKey
 
-Abort
+    Abort
 
 //==============================================
 
