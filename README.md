@@ -94,8 +94,10 @@ End_Object
 Open Customer
 
 Procedure ShowCust Global Integer iNum tCustomer tThisOne
+
    ShowLn "=================================="
-   ShowLn ("ShowCust, record" * String(iNum))
+
+ShowLn ("ShowCust, record" * String(iNum))
    ShowLn "Number:      " (String(tThisOne.Customer_Number))
    ShowLn "Name:        " tThisOne.Name
    ShowLn "Address:     " tThisOne.Address
